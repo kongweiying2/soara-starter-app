@@ -1,0 +1,49 @@
+name: Verify template
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:unconfigured
+  e2e:
+    needs: verify
+    # Fork PRs have no test-project credentials; their credential-free checks still run.
+    if: vars.E2E_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ALLOW_TEST_DATA_WRITES: '1'
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.E2E_SUPABASE_PUBLISHABLE_KEY }}
+      E2E_USER_ONE_EMAIL: ${{ secrets.E2E_USER_ONE_EMAIL }}
+      E2E_USER_ONE_PASSWORD: ${{ secrets.E2E_USER_ONE_PASSWORD }}
+      E2E_USER_TWO_EMAIL: ${{ secrets.E2E_USER_TWO_EMAIL }}
+      E2E_USER_TWO_PASSWORD: ${{ secrets.E2E_USER_TWO_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:integration
+      - run: npm run test:e2e
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/playwright/
+          retention-days: 14
